@@ -13,12 +13,11 @@ import requests
 import json
 import base64
 import os
-import re
-from typing import Optional, Dict, List
-from pydantic import BaseModel, Field
+from typing import Optional, List
+from pydantic import Field
 
 
-class VaultGitHub:
+class VaultGitHubAPI:
     """Acessa vault Obsidian via GitHub API com cache local"""
     
     def __init__(self, repo: str = "isaquecarlo/obsidian-vault", subpasta: str = "VENTURI-AI", branch: str = "master", token: Optional[str] = None):
@@ -150,114 +149,108 @@ class VaultGitHub:
         return resultados
 
 
-class VaultGitHubTools:
-    """Ferramentas para OpenWebUI"""
+class Tools:
+    """
+    Ferramenta Vault GitHub: Acessa o vault Obsidian via GitHub API.
+    Lê notas, lista pastas e busca arquivos. Funciona 24/7 no servidor.
+    """
     
-    name = "vault_github"
-    description = "Acessa o vault Obsidian via GitHub. Lê notas, busca conteúdo, lista pastas. Funciona 24/7 no servidor sem depender do notebook."
-    version = "2.0.0"
-    author = "VENTURI-AI"
+    def __init__(self):
+        # Inicializa com repositório padrão
+        self.vault = VaultGitHubAPI()
     
-    class Tools:
-        
-        def __init__(self):
-            # Inicializa com repositório padrão
-            self.vault = VaultGitHub()
-        
-        def ler_nota(
-            self,
-            caminho_nota: str = Field(
-                description="Caminho da nota no vault (ex: 'INICIO.md', 'PROJETOS/Leo/ESTADO.md')"
-            ),
-            __user__: dict = {}
-        ):
-            """Lê uma nota específica do vault Obsidian via GitHub"""
-            try:
-                # Limpa o caminho
-                caminho = caminho_nota.strip("/")
-                
-                # Adiciona extensão .md se não tiver
-                if "." not in caminho.split("/")[-1]:
-                    caminho += ".md"
-                
-                conteudo = self.vault.ler_arquivo(caminho)
-                
-                return {
-                    "success": True,
-                    "arquivo": caminho_nota,
-                    "conteudo": conteudo,
-                    "tamanho": len(conteudo),
-                    "fonte": f"https://github.com/{self.vault.repo}/blob/{self.vault.branch}/{caminho}"
-                }
-                
-            except Exception as e:
-                return {
-                    "success": False,
-                    "erro": str(e),
-                    "sugestao": "Verifique se o caminho está correto ou use 'listar_pasta' para ver os arquivos disponíveis"
-                }
-        
-        def listar_pasta(
-            self,
-            caminho_pasta: str = Field(
-                default="",
-                description="Caminho da pasta (deixe vazio para raiz do vault). Ex: 'PROJETOS', 'IA-DIARIO/2026-04'"
-            ),
-            __user__: dict = {}
-        ):
-            """Lista arquivos e pastas de uma pasta no vault"""
-            try:
-                caminho = caminho_pasta.strip("/")
-                arquivos = self.vault.listar_arquivos(caminho)
-                
-                # Separa pastas e arquivos
-                pastas = [a for a in arquivos if a["tipo"] == "pasta"]
-                arqs = [a for a in arquivos if a["tipo"] == "arquivo"]
-                
-                return {
-                    "success": True,
-                    "caminho": caminho or "raiz",
-                    "pastas": [p["nome"] for p in pastas],
-                    "arquivos": [a["nome"] for a in arqs],
-                    "total": len(arquivos),
-                    "estrutura": arquivos
-                }
-                
-            except Exception as e:
-                return {
-                    "success": False,
-                    "erro": str(e)
-                }
-        
-        def buscar_vault(
-            self,
-            termo: str = Field(
-                description="Termo para buscar nos nomes dos arquivos (ex: 'INICIO', 'LEO', 'PROJETO')"
-            ),
-            max_resultados: int = Field(
-                default=10,
-                description="Máximo de resultados (padrão: 10)"
-            ),
-            __user__: dict = {}
-        ):
-            """Busca arquivos no vault pelo nome"""
-            try:
-                resultados = self.vault.buscar_arquivos(termo, max_resultados)
-                
-                return {
-                    "success": True,
-                    "termo_busca": termo,
-                    "encontrados": len(resultados),
-                    "resultados": resultados,
-                    "mensagem": f"Encontrados {len(resultados)} arquivos contendo '{termo}'"
-                }
-                
-            except Exception as e:
-                return {
-                    "success": False,
-                    "erro": str(e)
-                }
-
-
-# Instância para exportação
-tools = VaultGitHubTools()
+    def ler_nota(
+        self,
+        caminho_nota: str = Field(
+            description="Caminho da nota no vault (ex: 'INICIO.md', 'PROJETOS/Leo/ESTADO.md')"
+        )
+    ) -> str:
+        """
+        Lê uma nota específica do vault Obsidian via GitHub.
+        Retorna o conteúdo completo do arquivo.
+        """
+        try:
+            # Limpa o caminho
+            caminho = caminho_nota.strip("/")
+            
+            # Adiciona extensão .md se não tiver
+            if "." not in caminho.split("/")[-1]:
+                caminho += ".md"
+            
+            conteudo = self.vault.ler_arquivo(caminho)
+            
+            return f"✅ Arquivo: {caminho_nota}\n📁 Fonte: https://github.com/{self.vault.repo}/blob/{self.vault.branch}/{caminho}\n\n{conteudo}"
+            
+        except Exception as e:
+            return f"❌ Erro: {str(e)}\n💡 Dica: Use 'listar_pasta' para ver os arquivos disponíveis"
+    
+    def listar_pasta(
+        self,
+        caminho_pasta: str = Field(
+            default="",
+            description="Caminho da pasta (deixe vazio para raiz do vault). Ex: 'PROJETOS', 'IA-DIARIO/2026-04'"
+        )
+    ) -> str:
+        """
+        Lista arquivos e pastas de uma pasta no vault Obsidian.
+        Útil para navegar pela estrutura do vault.
+        """
+        try:
+            caminho = caminho_pasta.strip("/")
+            arquivos = self.vault.listar_arquivos(caminho)
+            
+            # Separa pastas e arquivos
+            pastas = [a for a in arquivos if a["tipo"] == "pasta"]
+            arqs = [a for a in arquivos if a["tipo"] == "arquivo"]
+            
+            resultado = f"📂 Pasta: {caminho or 'raiz'}\n"
+            resultado += f"📊 Total: {len(arquivos)} itens\n\n"
+            
+            if pastas:
+                resultado += "📁 Pastas:\n"
+                for p in pastas:
+                    resultado += f"  - {p['nome']}/\n"
+                resultado += "\n"
+            
+            if arqs:
+                resultado += "📄 Arquivos:\n"
+                for a in arqs:
+                    resultado += f"  - {a['nome']}\n"
+            
+            return resultado
+            
+        except Exception as e:
+            return f"❌ Erro: {str(e)}"
+    
+    def buscar_vault(
+        self,
+        termo: str = Field(
+            description="Termo para buscar nos nomes dos arquivos (ex: 'INICIO', 'LEO', 'PROJETO')"
+        ),
+        max_resultados: int = Field(
+            default=10,
+            description="Máximo de resultados (padrão: 10)"
+        )
+    ) -> str:
+        """
+        Busca arquivos no vault pelo nome.
+        Útil para encontrar notas quando não sabe o caminho exato.
+        """
+        try:
+            resultados = self.vault.buscar_arquivos(termo, max_resultados)
+            
+            if not resultados:
+                return f"🔍 Nenhum arquivo encontrado com '{termo}'"
+            
+            resultado = f"🔍 Busca: '{termo}'\n"
+            resultado += f"📊 Encontrados: {len(resultados)} arquivos\n\n"
+            
+            for item in resultados:
+                resultado += f"📄 {item['caminho']}\n"
+            
+            resultado += f"\n💡 Use 'ler_nota' com o caminho completo para ler o arquivo"
+            
+            return resultado
+            
+        except Exception as e:
+            return f"❌ Erro: {str(e)}"

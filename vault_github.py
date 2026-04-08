@@ -1,6 +1,6 @@
 """
 title: Vault GitHub
-version: 2.0.0
+version: 2.0.1
 description: Acessa vault Obsidian via GitHub API. Lê notas, lista pastas, busca arquivos. Funciona 24/7 sem configuração.
 author: VENTURI-AI
 """

@@ -1,16 +1,18 @@
 """
 title: Vault GitHub
 author: VENTURI-AI
-version: 2.1.0
-required_open_webui_version: 0.3.0
+version: 2.2.0
 
-Ferramenta: Vault GitHub - Acesso ao Obsidian via GitHub API com cache
-Lê arquivos do vault Obsidian sincronizado no GitHub - funciona 24/7 no servidor
+Ferramenta: Vault GitHub - Acesso ao Obsidian via GitHub API
+Lê arquivos do vault Obsidian sincronizado no GitHub
 
 CONFIGURAÇÃO:
-Na configuração da ferramenta (clicar na engrenagem ⚙️ ao lado da ferramenta),
-adicionar:
-- github_token: seu_token_aqui (o token do GitHub que começa com ghp_)
+1. Crie um arquivo chamado 'vault_config.json' na pasta raiz do OpenWebUI
+2. Conteúdo do arquivo:
+{
+    "github_token": "ghp_SEU_TOKEN_AQUI"
+}
+3. Ou configure via variável de ambiente GITHUB_TOKEN
 """
 
 import requests
@@ -18,11 +20,11 @@ import json
 import base64
 import os
 from typing import Optional, List
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 
 class VaultGitHubAPI:
-    """Acessa vault Obsidian via GitHub API com cache local"""
+    """Acessa vault Obsidian via GitHub API"""
     
     def __init__(self, repo: str = "isaquecarlo/obsidian-vault", subpasta: str = "VENTURI-AI", branch: str = "master", token: Optional[str] = None):
         self.repo = repo
@@ -31,8 +33,16 @@ class VaultGitHubAPI:
         self.token = token
         if not self.token:
             raise Exception(
-                "GITHUB_TOKEN não configurado. "
-                "Vá nas configurações da ferramenta (⚙️) e adicione seu token do GitHub no campo 'github_token'"
+                "⚠️ GITHUB_TOKEN não configurado!\n\n"
+                "Para configurar, escolha UMA destas opções:\n\n"
+                "OPÇÃO 1 - Arquivo de configuração (recomendado):\n"
+                "• Crie o arquivo: vault_config.json\n"
+                "• Conteúdo: {\"github_token\": \"ghp_seu_token_aqui\"}\n"
+                "• Coloque na pasta onde o OpenWebUI está instalado\n\n"
+                "OPÇÃO 2 - Variável de ambiente:\n"
+                "• Adicione GITHUB_TOKEN=ghp_seu_token_aqui\n"
+                "• No Docker: -e GITHUB_TOKEN=ghp_seu_token_aqui\n\n"
+                "Token começa com 'ghp_' - crie em: github.com/settings/tokens"
             )
         self.base_url = f"https://api.github.com/repos/{repo}"
         self.cache = {}
@@ -136,52 +146,80 @@ class VaultGitHubAPI:
         return resultados
 
 
-class Valves(BaseModel):
-    """Configurações da ferramenta - aparecem na UI do OpenWebUI"""
-    github_token: str = Field(
-        default="",
-        description="Token do GitHub (começa com ghp_). Crie em: github.com/settings/tokens"
-    )
+def _carregar_token() -> Optional[str]:
+    """Carrega token de múltiplas fontes"""
+    
+    # 1. Tenta variável de ambiente
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GITHUB_PAT")
+    if token:
+        return token
+    
+    # 2. Tenta arquivo de configuração em vários locais possíveis
+    locais_config = [
+        "vault_config.json",  # Mesma pasta da ferramenta
+        "/app/vault_config.json",  # Docker comum
+        "/data/vault_config.json",  # OpenWebUI padrão
+        os.path.expanduser("~/vault_config.json"),  # Home do usuário
+        "./vault_config.json",  # Diretório atual
+    ]
+    
+    for caminho in locais_config:
+        try:
+            if os.path.exists(caminho):
+                with open(caminho, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                    token = config.get("github_token") or config.get("token")
+                    if token:
+                        return token
+        except:
+            continue
+    
+    return None
 
 
 class Tools:
     """
     Ferramenta Vault GitHub: Acessa o vault Obsidian via GitHub API.
-    Lê notas, lista pastas e busca arquivos. Funciona 24/7 no servidor.
     
-    CONFIGURAÇÃO: Clique na engrenagem ⚙️ ao lado da ferramenta e adicione seu github_token
+    CONFIGURAÇÃO: Crie um arquivo vault_config.json com seu token:
+    {"github_token": "ghp_seu_token_aqui"}
     """
     
     def __init__(self):
-        self.valves = None
         self.vault = None
     
     def _get_vault(self):
         """Inicializa o vault com o token configurado"""
         if not self.vault:
-            token = None
-            
-            # Tenta pegar dos valves (configuração da ferramenta)
-            if self.valves and self.valves.github_token:
-                token = self.valves.github_token
-            
-            # Fallback para variáveis de ambiente
-            if not token:
-                token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GITHUB_PAT")
+            token = _carregar_token()
             
             if not token:
                 raise Exception(
-                    "⚙️ TOKEN NÃO CONFIGURADO\n\n"
-                    "1. No OpenWebUI, vá em: Admin → Tools (ou Workshop → Tools)\n"
-                    "2. Encontre a ferramenta 'vault_github'\n"
-                    "3. Clique no ícone de engrenagem ⚙️ ao lado\n"
-                    "4. No campo 'github_token', cole seu token do GitHub\n"
-                    "5. Salve e tente novamente\n\n"
-                    "Como criar o token:\n"
-                    "• Vá em: github.com/settings/tokens\n"
-                    "• Clique: Generate new token (classic)\n"
-                    "• Marque: 'repo' (acesso a repositórios privados)\n"
-                    "• Copie o token (começa com 'ghp_')"
+                    "⚠️ TOKEN DO GITHUB NÃO CONFIGURADO!\n\n"
+                    "Para usar esta ferramenta, você precisa configurar o token.\n"
+                    "Escolha UMA destas opções:\n\n"
+                    "═══════════════════════════════════════\n"
+                    "OPÇÃO 1 - Arquivo de configuração:\n"
+                    "═══════════════════════════════════════\n"
+                    "1. Crie um arquivo chamado 'vault_config.json'\n"
+                    "2. Conteúdo:\n"
+                    '   {"github_token": "ghp_seu_token_aqui"}\n'
+                    "3. Salve na pasta onde está o OpenWebUI\n\n"
+                    "═══════════════════════════════════════\n"
+                    "OPÇÃO 2 - Docker (se usar):\n"
+                    "═══════════════════════════════════════\n"
+                    "Adicione ao comando docker run:\n"
+                    "-e GITHUB_TOKEN=ghp_seu_token_aqui \n\n"
+                    "═══════════════════════════════════════\n"
+                    "COMO CRIAR O TOKEN:\n"
+                    "═══════════════════════════════════════\n"
+                    "1. Vá em: github.com/settings/tokens\n"
+                    "2. Clique: 'Generate new token (classic)'\n"
+                    "3. Dê um nome: 'OpenWebUI Vault'\n"
+                    "4. Marque: 'repo' (acesso a repositórios privados)\n"
+                    "5. Clique em 'Generate token'\n"
+                    "6. Copie o token (começa com 'ghp_')\n\n"
+                    "⚠️ O token só aparece UMA VEZ, guarde bem!"
                 )
             
             self.vault = VaultGitHubAPI(token=token)
